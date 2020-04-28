@@ -1,5 +1,5 @@
 
-let camera, scene, renderer;
+let camera, scene, renderer,controls;
 let camera_x,camera_y,camera_z;
 let bounding_box;
 
@@ -33,6 +33,7 @@ let followRule = gui_settings.FollowRule;
 let joinRule = gui_settings.JoinRule;
 let boids = [];
 let velocities = [];
+let stats = new Stats();
 
 init();
 animate();
@@ -58,7 +59,7 @@ function addBoid(){
     }
     else{
         //normal ball
-        boid_geo = new THREE.SphereGeometry(6,12,12);
+        boid_geo = new THREE.SphereGeometry(6,11,11);
     }
 
     let boid = new THREE.Mesh(boid_geo, material);
@@ -106,12 +107,13 @@ function init() {
         addBoid();
     }
 
-
     renderer = new THREE.WebGLRenderer( {antialias:true , alpha: true} );
     renderer.setClearColor( 0x2f2f2f, 1);
     renderer.setSize( window.innerWidth, window.innerHeight );
-    
-    let controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+    controls.target.set( MAX_X/2, MAX_Y/2, MAX_Z/2 );
     let gui = new dat.GUI();
     gui.add(gui_settings, 'MAX_V', 0,20);
     gui.add(gui_settings,'MAX_X',50,2000);
@@ -127,6 +129,10 @@ function init() {
     gui.add(gui_settings,'JoinRule');
     gui.add(gui_settings,'AddSaintQuartz');
     document.body.appendChild( renderer.domElement );
+
+
+    stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
+    document.body.appendChild( stats.dom );
 }	
 
 
@@ -142,7 +148,7 @@ function getSpeed(v1) {
 }
 
 function animate() {
-
+    stats.begin();
     MAX_V = gui_settings.MAX_V;
     let changed_div = false;
     if(MAX_X !== gui_settings.MAX_X ||MAX_Y !== gui_settings.MAX_Y|| MAX_Z !== gui_settings.MAX_Z   ){
@@ -155,11 +161,10 @@ function animate() {
 
     if(changed_div){
         scene.remove(bounding_box);
+        controls.target.set( MAX_X/2, MAX_Y/2, MAX_Z/2 );
         setBoundingBox();
     }
     bounding_box.visible= gui_settings.ShowBorder;
-
-    // bounding_box.visible= true
     borderless = gui_settings.BorderLoop;
     neighbourRange = gui_settings.NeighbourRange;
     avoidDistance = gui_settings.AvoidanceRange;
@@ -181,7 +186,6 @@ function animate() {
     }
     num_boids = gui_settings.BoidCount;
 
-    requestAnimationFrame( animate );
 
     for (let i = 0; i < boids.length; i++) {
 
@@ -203,21 +207,17 @@ function animate() {
             }
 
             let dist = getDistance(boids[i],boids[j]);
-
             if(dist <= neighbourRange){
                 local_n.add(boids[j].position);
                 local_v.add(velocities[j]);
                 n++;
 
-                //rule 1
-                if(dist <= avoidDistance){
-                    x_diff = boids[i].position.x - boids[j].position.x;
-                    y_diff = boids[i].position.y - boids[j].position.y;
-                    z_diff = boids[i].position.z - boids[j].position.z;
-                    ratio = 10;
-                    v1.add(new THREE.Vector3(x_diff,y_diff,z_diff));
-                    v1.divideScalar(ratio);
-                }
+            }
+
+            //rule 1
+            if(dist <= avoidDistance){
+                v1.add(boids[i].position).sub(boids[j].position);
+                v1.divideScalar(10);
             }
         }
 
@@ -228,7 +228,6 @@ function animate() {
             local_n.sub(boids[i].position);
             local_n.divideScalar(100);
             local_v.add(velocities[i]);
-
         }
 
         if(avoidRule){
@@ -240,6 +239,10 @@ function animate() {
         if(followRule){
             velocities[i].add(local_v);
         }
+
+        // let gravity = new THREE.Vector3(0,-(1+MAX_V)/10,0);
+        // velocities[i].add(gravity);
+
         // limit speed
         if(getSpeed(velocities[i]) > MAX_V){
             velocities[i] = velocities[i].normalize().multiplyScalar(MAX_V);
@@ -292,11 +295,13 @@ function animate() {
                 velocities[i].z = -velocities[i].z;
                 boids[i].position.z = 0;
             }
-
         }
     }
+    stats.end();
     renderer.render( scene, camera );
+    requestAnimationFrame( animate );
 }
+
 
 function  onWindowResize() {
     camera.aspect = window.innerWidth/window.innerHeight;
